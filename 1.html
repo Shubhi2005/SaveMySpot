@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Queue Reports - Live Queue Lengths Map</title>
+  <style>
+    /* Reset & base */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f4f7f9; color: #333;
+      display: flex; flex-direction: column; height: 100vh;
+    }
+    header {
+      background: #0066ff;
+      color: white;
+      padding: 1rem 1.5rem;
+      font-size: 1.5rem;
+      font-weight: 700;
+      user-select: none;
+      text-align: center;
+      letter-spacing: 1px;
+      box-shadow: 0 2px 6px rgb(0 0 0 / 0.15);
+    }
+    main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+    #form-section {
+      background: white;
+      width: 320px;
+      padding: 1rem 1.25rem;
+      box-shadow: inset -1px 0 6px rgb(0 0 0 / 0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      overflow-y: auto;
+    }
+    #map {
+      flex: 1;
+      height: 100vh;
+      position: relative;
+    }
+    label {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      display: inline-block;
+      user-select: none;
+    }
+    input[type="text"], input[type="number"], input[type="datetime-local"] {
+      width: 100%;
+      padding: 0.5rem;
+      font-size: 1rem;
+      border-radius: 4px;
+      border: 1.5px solid #cbd5e1;
+      transition: border-color 0.3s ease;
+    }
+    input[type="text"]:focus, input[type="number"]:focus, input[type="datetime-local"]:focus {
+      border-color: #0066ff;
+      outline: none;
+    }
+    button {
+      background: #0066ff;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.2rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+      box-shadow: 0 4px 8px rgb(0 102 255 / 0.25);
+      transition: background-color 0.3s ease;
+    }
+    button:hover, button:focus {
+      background: #0051cc;
+      outline: none;
+    }
+    .report-list {
+      margin-top: 1rem;
+      flex-grow: 1;
+      overflow-y: auto;
+      border-top: 1px solid #eee;
+      padding-top: 1rem;
+    }
+    .report-item {
+      background: #f9fafb;
+      margin-bottom: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-radius: 5px;
+      border: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+    .report-header {
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      font-size: 1.1rem;
+      color: #222;
+    }
+    .report-info {
+      font-size: 0.9rem;
+      color: #555;
+      margin-bottom: 0.5rem;
+      word-break: break-word;
+    }
+    .vote-buttons {
+      display: flex;
+      gap: 12px;
+    }
+    .vote-btn {
+      background-color: #e2e8f0;
+      border: none;
+      border-radius: 4px;
+      color: #333;
+      padding: 0.3rem 0.6rem;
+      cursor: pointer;
+      user-select: none;
+      flex-grow: 1;
+      text-align: center;
+      font-weight: 600;
+      box-shadow: 0 2px 4px rgb(0 0 0 / 0.10);
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    .vote-btn:hover {
+      background-color: #cbd5e1;
+      color: #0066ff;
+    }
+    .vote-btn:disabled {
+      background-color: #94a3b8;
+      cursor: default;
+      color: #656d78;
+    }
+    #status {
+      text-align: center;
+      padding: 0.5rem 0;
+      font-size: 0.9rem;
+      color: #0066ff;
+      min-height: 1.5rem;
+      font-weight: 600;
+    }
+    footer {
+      text-align: center;
+      font-size: 0.85rem;
+      color: #666;
+      padding: 0.5rem 1rem;
+      border-top: 1px solid #ddd;
+      user-select: none;
+      background: #fafafa;
+    }
+    /* Leaflet styles */
+    .leaflet-container {
+      height: 100%;
+      width: 100%;
+      outline: none;
+    }
+  </style>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+    integrity="sha256-sA+qX1HaUOFjrEjkfF9Dk4mEfF09TnC1pHT+vQZ6/2w="
+    crossorigin=""
+  />
+</head>
+<body>
+  <header>
+    Queue Reports - Live Crowd-Sourced Queue Lengths
+  </header>
+
+  <main>
+    <section id="form-section" aria-label="Submit queue report and view reports">
+      <form id="report-form" aria-describedby="status" novalidate>
+        <label for="location">Location Name</label>
+        <input type="text" id="location" name="location" placeholder="e.g. Central Cafe" required minlength="3" maxlength="64" autocomplete="off" />
+        
+        <label for="latitude">Latitude</label>
+        <input type="number" step="any" id="latitude" name="latitude" placeholder="e.g. 37.7749" required min="-90" max="90" />
+        
+        <label for="longitude">Longitude</label>
+        <input type="number" step="any" id="longitude" name="longitude" placeholder="e.g. -122.4194" required min="-180" max="180" />
+        
+        <label for="queue-length">Queue Length (people)</label>
+        <input type="number" id="queue-length" name="queue-length" placeholder="e.g. 12" required min="0" max="1000" />
+        
+        <label for="timestamp">Date &amp; Time</label>
+        <input type="datetime-local" id="timestamp" name="timestamp" required />
+        
+        <button type="submit" aria-live="polite">Submit Report</button>
+      </form>
+      <div id="status" role="alert" aria-live="polite"></div>
+
+      <div class="report-list" id="reports" aria-label="List of submitted queue reports"></div>
+    </section>
+
+    <section id="map" aria-label="Map showing queue reports"></section>
+  </main>
+
+  <footer>
+    &copy; 2024 Queue Reports Project - Crowd Powered Queue Lengths
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+    integrity="sha256-WZFh6UoB9NTfDmKARJqQk7awd22zKfF6odP+Dz1Pjz8="
+    crossorigin=""></script>
+  <script>
+    // === In-memory data store ===
+    // This simulates backend API with localStorage persistence for demo
+    
+    const STORAGE_KEY_REPORTS = 'queue_reports_data';
+    const STORAGE_KEY_VOTES = 'queue_reports_votes'; // keyed by userId-reportId
+    const userId = 'demo-user'; // simplified auth: single demo user
+
+    // Load data or initialize empty arrays
+    let reports = JSON.parse(localStorage.getItem(STORAGE_KEY_REPORTS)) || [];
+    let votes = JSON.parse(localStorage.getItem(STORAGE_KEY_VOTES)) || {};
+
+    // Utility: Save back to localStorage
+    function saveReports() {
+      localStorage.setItem(STORAGE_KEY_REPORTS, JSON.stringify(reports));
+    }
+    function saveVotes() {
+      localStorage.setItem(STORAGE_KEY_VOTES, JSON.stringify(votes));
+    }
+
+    // Generate unique report IDs for simplicity
+    function generateReportId() {
+      return 'r_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    }
+
+    // Find report by ID helper
+    function findReport(id) {
+      return reports.find(r => r.id === id);
+    }
+
+    // Validate coordinates
+    function isValidLatitude(lat) {
+      return !isNaN(lat) && lat >= -90 && lat <= 90;
+    }
+    function isValidLongitude(lng) {
+      return !isNaN(lng) && lng >= -180 && lng <= 180;
+    }
+
+    // Format timestamp to human readable
+    function formatTimestamp(ts) {
+      try {
+        const date = new Date(ts);
+        // Use locale string with date + time
+        return date.toLocaleString(undefined, {
+          year: 'numeric', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+          hour12: true
+        });
+      } catch {
+        return ts;
+      }
+    }
+
+    // Calculate vote score of a report (sum of votes: up=+1, down=-1)
+    function voteScore(reportId) {
+      return reports.reduce((score, r) => {
+        if(r.id === reportId) {
+          return r.upvotes - r.downvotes;
+        }
+        return score;
+      }, 0);
+    }
+
+    // === Leaflet Map Initialization ===
+
+    // Start centered roughly at world view
+    const map = L.map('map').setView([20, 0], 2);
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution:
+        '&copy; <a href="https://openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Marker layer group
+    const markersGroup = L.layerGroup().addTo(map);
+
+    // Mapping of reportId to Leaflet marker
+    const markersById = {};
+
+    // Create popup content for each marker
+    function createPopupContent(report) {
+      return `<strong>${report.location}</strong><br/>
+              Queue Length: <strong>${report.queue_length}</strong><br/>
+              Reported at: ${formatTimestamp(report.timestamp)}<br/>
+              Accuracy Score: ${report.upvotes - report.downvotes}`;
+    }
+
+    // Refresh all markers based on reports
+    function refreshMarkers() {
+      markersGroup.clearLayers();
+      reports.forEach(report => {
+        const marker = L.marker([report.latitude, report.longitude], {
+          title: report.location
+        });
+        marker.bindPopup(createPopupContent(report));
+        marker.addTo(markersGroup);
+        markersById[report.id] = marker;
+      });
+    }
+
+    // === Frontend & Form Handling ===
+
+    const form = document.getElementById('report-form');
+    const statusEl = document.getElementById('status');
+    const reportsEl = document.getElementById('reports');
+
+    // Render the list of reports with voting controls
+    function renderReports() {
+      if(reports.length === 0) {
+        reportsEl.innerHTML = '<p>No reports submitted yet.</p>';
+        return;
+      }
+
+      // Sort reports by newest first
+      const sortedReports = [...reports].sort((a,b) => (b.timestamp.localeCompare(a.timestamp)));
+
+      reportsEl.innerHTML = '';
+      sortedReports.forEach(report => {
+        const item = document.createElement('article');
+        item.className = 'report-item';
+        item.setAttribute('tabindex', '0');
+        item.setAttribute('aria-label', `Queue report at ${report.location}, length ${report.queue_length} people, reported on ${formatTimestamp(report.timestamp)}. Accuracy score ${report.upvotes - report.downvotes}`);
+
+        const header = document.createElement('h3');
+        header.className = 'report-header';
+        header.textContent = report.location;
+
+        const info = document.createElement('div');
+        info.className = 'report-info';
+        info.innerHTML =
+          `Queue Length: <strong>${report.queue_length}</strong> people<br/>` +
+          `Reported at: ${formatTimestamp(report.timestamp)}<br/>` +
+          `Vote Score: <strong>${report.upvotes - report.downvotes}</strong>`;
+
+        const voteDiv = document.createElement('div');
+        voteDiv.className = 'vote-buttons';
+
+        // Upvote button
+        const upBtn = document.createElement('button');
+        upBtn.className = 'vote-btn';
+        upBtn.textContent = '👍 Upvote';
+        upBtn.title = 'Upvote to confirm this report is accurate';
+        upBtn.disabled = hasUserVoted(report.id);
+        upBtn.addEventListener('click', () => handleVote(report.id, 1, upBtn, downBtn));
+
+        // Downvote button
+        const downBtn = document.createElement('button');
+        downBtn.className = 'vote-btn';
+        downBtn.textContent = '👎 Downvote';
+        downBtn.title = 'Downvote if this report is inaccurate';
+        downBtn.disabled = hasUserVoted(report.id);
+        downBtn.addEventListener('click', () => handleVote(report.id, -1, upBtn, downBtn));
+
+        voteDiv.appendChild(upBtn);
+        voteDiv.appendChild(downBtn);
+
+        item.appendChild(header);
+        item.appendChild(info);
+        item.appendChild(voteDiv);
+
+        reportsEl.appendChild(item);
+      });
+    }
+
+    // Check if current user has voted on a report
+    function hasUserVoted(reportId) {
+      return votes[`${userId}_${reportId}`] !== undefined;
+    }
+
+    // Handle voting on report: +1 or -1
+    function handleVote(reportId, voteValue, upBtn, downBtn) {
+      if(hasUserVoted(reportId)) {
+        alert('You have already voted on this report.');
+        return;
+      }
+
+      votes[`${userId}_${reportId}`] = voteValue;
+      saveVotes();
+
+      // Update report vote counts
+      const report = findReport(reportId);
+      if (!report) return;
+
+      if(voteValue === 1) {
+        report.upvotes++;
+      } else if(voteValue === -1) {
+        report.downvotes++;
+      }
+
+      saveReports();
+      refreshMarkers();
+
+      // Disable both buttons after voting
+      upBtn.disabled = true;
+      downBtn.disabled = true;
+
+      renderReports();
+    }
+
+    // Add new report to data store with validation
+    function addReport(report) {
+      // Reject duplicate report at same location & same timestamp (+- 5 mins)
+      const timeMs = new Date(report.timestamp).getTime();
+      const duplicate = reports.find(r =>
+        r.location.toLowerCase() === report.location.toLowerCase() &&
+        Math.abs(new Date(r.timestamp).getTime() - timeMs) < 5*60*1000
+      );
+      if(duplicate) {
+        return {error: 'Duplicate report detected for this location within 5 minutes.'};
+      }
+
+      // Add metadata and initial votes
+      report.id = generateReportId();
+      report.upvotes = 0;
+      report.downvotes = 0;
+      reports.push(report);
+      saveReports();
+      return {success: true};
+    }
+
+    // Form submission handler
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      statusEl.textContent = '';
+
+      const formData = new FormData(form);
+      const location = formData.get('location').trim();
+      const latitude = parseFloat(formData.get('latitude'));
+      const longitude = parseFloat(formData.get('longitude'));
+      const queueLength = parseInt(formData.get('queue-length'), 10);
+      const timestamp = formData.get('timestamp');
+
+      // Validation
+      if(location.length < 3) {
+        statusEl.textContent = 'Location name must be at least 3 characters.';
+        return;
+      }
+      if(!isValidLatitude(latitude)) {
+        statusEl.textContent = 'Latitude must be between -90 and 90.';
+        return;
+      }
+      if(!isValidLongitude(longitude)) {
+        statusEl.textContent = 'Longitude must be between -180 and 180.';
+        return;
+      }
+      if(isNaN(queueLength) || queueLength < 0) {
+        statusEl.textContent = 'Queue length must be zero or more.';
+        return;
+      }
+      if(!timestamp) {
+        statusEl.textContent = 'Please provide date and time of the report.';
+        return;
+      }
+      const reportDate = new Date(timestamp);
+      if(isNaN(reportDate.getTime())) {
+        statusEl.textContent = 'Invalid date/time.';
+        return;
+      }
+      // Check if timestamp is in future (+5 mins tolerance)
+      if(reportDate.getTime() > Date.now() + 5*60*1000) {
+        statusEl.textContent = 'Timestamp cannot be in the future.';
+        return;
+      }
+
+      // Add the report
+      const result = addReport({
+        location,
+        latitude,
+        longitude,
+        queue_length: queueLength,
+        timestamp: reportDate.toISOString()
+      });
+
+      if(result.error) {
+        statusEl.textContent = result.error;
+        return;
+      }
+
+      // Success
+      statusEl.textContent = 'Report submitted successfully!';
+      form.reset();
+
+      // Reset timestamp to current local datetime formatted for datetime-local input
+      form.timestamp.value = new Date().toISOString().slice(0, 16);
+
+      refreshMarkers();
+      renderReports();
+    });
+
+    // Initialize form timestamp input to current datetime local
+    function initTimestamp() {
+      const now = new Date();
+      const localISO = now.toISOString().slice(0,16);
+      form.timestamp.value = localISO;
+    }
+
+    // Initial render
+    window.onload = () => {
+      initTimestamp();
+      refreshMarkers();
+      renderReports();
+    };
+  </script>
+</body>
+</html>
+

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report a Queue - SaveMySpot</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Report a Queue</h1>
+
+        {% if error %}
+            <div class="error-message" style="color: red; margin: 10px 0;">{{ error }}</div>
+        {% endif %}
+        <form method="POST" action="/report">
+            <div class="form-group">
+                <label for="location_name">Location Name:</label>
+                <input type="text" id="location_name" name="location_name" required>
+            </div>
+            
+        <div id="map-picker" style="height: 300px; margin: 20px 0;"></div>
+        <input type="hidden" id="latitude" name="latitude" required>
+        <input type="hidden" id="longitude" name="longitude" required>
+
+        <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+        <script>
+            const pickerMap = L.map('map-picker').setView([51.505, -0.09], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(pickerMap);
+            
+            let marker;
+            pickerMap.on('click', (e) => {
+                if (marker) pickerMap.removeLayer(marker);
+                marker = L.marker(e.latlng).addTo(pickerMap);
+                document.getElementById('latitude').value = e.latlng.lat;
+                document.getElementById('longitude').value = e.latlng.lng;
+            });
+        </script>
+            
+            <div class="form-group">
+                <label for="longitude">Longitude:</label>
+                <input type="text" id="longitude" name="longitude" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="queue_length">Queue Length (approx. people):</label>
+                <input type="number" id="queue_length" name="queue_length" required>
+            </div>
+            
+            <button type="submit" class="button">Submit Report</button>
+        </form>
+        
+        <a href="/" class="button secondary">Back to Map</a>
+    </div>
+</body>
+</html>
